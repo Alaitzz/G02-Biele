@@ -1,0 +1,586 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>G02 — Clasificación por Visión Artificial · Biele</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.2/socket.io.min.js"></script>
+  <style>
+    /* ── Reset & base ─────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:        #0d0f14;
+      --bg2:       #161920;
+      --bg3:       #1e2230;
+      --border:    #2a2f42;
+      --text:      #e4e6f0;
+      --muted:     #6b7280;
+      --green:     #22c55e;
+      --green-bg:  #052e16;
+      --red:       #ef4444;
+      --red-bg:    #2d0707;
+      --blue:      #60a5fa;
+      --blue-bg:   #0c1a35;
+      --amber:     #f59e0b;
+      --radius:    12px;
+      --font:      'Segoe UI', system-ui, sans-serif;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--font);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* ── Header ───────────────────────────────────────────── */
+    header {
+      padding: 20px 32px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1px solid var(--border);
+      background: var(--bg2);
+    }
+
+    .header-left { display: flex; align-items: center; gap: 14px; }
+
+    .logo {
+      width: 40px; height: 40px;
+      background: var(--blue);
+      border-radius: 10px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 20px;
+    }
+
+    .header-title h1 { font-size: 16px; font-weight: 600; }
+    .header-title p  { font-size: 12px; color: var(--muted); margin-top: 2px; }
+
+    .status-pill {
+      display: flex; align-items: center; gap: 8px;
+      padding: 6px 14px;
+      border-radius: 999px;
+      font-size: 12px; font-weight: 500;
+      background: var(--bg3);
+      border: 1px solid var(--border);
+      transition: all .3s;
+    }
+
+    .status-dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background: var(--muted);
+      transition: background .3s;
+    }
+
+    .status-pill.online .status-dot { background: var(--green); animation: pulse 2s infinite; }
+    .status-pill.online { border-color: var(--green); color: var(--green); }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50%       { opacity: .4; }
+    }
+
+    /* ── Main layout ──────────────────────────────────────── */
+    main {
+      flex: 1;
+      display: grid;
+      grid-template-columns: 1fr 340px;
+      grid-template-rows: auto 1fr;
+      gap: 20px;
+      padding: 24px 32px;
+      max-width: 1400px;
+      width: 100%;
+      margin: 0 auto;
+    }
+
+    /* ── Cards base ───────────────────────────────────────── */
+    .card {
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 20px;
+    }
+
+    .card-title {
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: .08em;
+      color: var(--muted);
+      margin-bottom: 16px;
+    }
+
+    /* ── Stats row ────────────────────────────────────────── */
+    .stats-row {
+      grid-column: 1 / -1;
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 16px;
+    }
+
+    .stat-card {
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 20px 24px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .stat-label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing:.05em; }
+    .stat-value { font-size: 36px; font-weight: 700; line-height: 1; }
+    .stat-sub   { font-size: 12px; color: var(--muted); }
+
+    .stat-card.green { border-color: var(--green); background: var(--green-bg); }
+    .stat-card.green .stat-value { color: var(--green); }
+    .stat-card.red   { border-color: var(--red);   background: var(--red-bg);   }
+    .stat-card.red   .stat-value { color: var(--red);   }
+    .stat-card.blue  { border-color: var(--blue);  background: var(--blue-bg);  }
+    .stat-card.blue  .stat-value { color: var(--blue);  }
+
+    /* ── Visualizador central ─────────────────────────────── */
+    .visualizer {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    /* Resultado actual */
+    .resultado-card {
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 28px;
+      display: flex;
+      align-items: center;
+      gap: 28px;
+      transition: border-color .4s, background .4s;
+      min-height: 140px;
+    }
+
+    .resultado-card.circulo { border-color: var(--green); background: var(--green-bg); }
+    .resultado-card.cuadrado { border-color: var(--red);  background: var(--red-bg);  }
+
+    .forma-svg { flex-shrink: 0; }
+
+    .resultado-info h2 { font-size: 28px; font-weight: 700; margin-bottom: 4px; }
+    .resultado-info p  { font-size: 14px; color: var(--muted); }
+    .resultado-info .destino {
+      display: inline-block;
+      margin-top: 10px;
+      padding: 4px 12px;
+      border-radius: 6px;
+      font-size: 13px; font-weight: 600;
+      background: rgba(255,255,255,.08);
+    }
+
+    /* Estado del ciclo */
+    .ciclo-card {
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 20px;
+    }
+
+    .ciclo-steps {
+      display: flex;
+      justify-content: space-between;
+      position: relative;
+      margin-top: 8px;
+    }
+
+    .ciclo-steps::before {
+      content: '';
+      position: absolute;
+      top: 18px; left: 0; right: 0;
+      height: 2px;
+      background: var(--border);
+    }
+
+    .ciclo-step {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 8px;
+      z-index: 1;
+    }
+
+    .step-dot {
+      width: 36px; height: 36px;
+      border-radius: 50%;
+      background: var(--bg3);
+      border: 2px solid var(--border);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 16px;
+      transition: all .4s;
+    }
+
+    .ciclo-step.active .step-dot {
+      background: var(--blue-bg);
+      border-color: var(--blue);
+      animation: pulse 1s infinite;
+    }
+
+    .ciclo-step.done .step-dot {
+      background: var(--green-bg);
+      border-color: var(--green);
+    }
+
+    .step-label { font-size: 11px; color: var(--muted); text-align: center; max-width: 70px; }
+    .ciclo-step.active .step-label { color: var(--blue); }
+    .ciclo-step.done   .step-label { color: var(--green); }
+
+    /* ── Panel lateral: log ───────────────────────────────── */
+    .log-panel {
+      grid-row: 2;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .log-list {
+      flex: 1;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      max-height: 500px;
+      padding-right: 4px;
+    }
+
+    .log-list::-webkit-scrollbar { width: 4px; }
+    .log-list::-webkit-scrollbar-track { background: transparent; }
+    .log-list::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+    .log-item {
+      display: flex;
+      gap: 10px;
+      padding: 10px 12px;
+      border-radius: 8px;
+      background: var(--bg3);
+      border: 1px solid var(--border);
+      animation: slideIn .25s ease;
+    }
+
+    @keyframes slideIn {
+      from { opacity: 0; transform: translateY(-8px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    .log-icon { font-size: 16px; flex-shrink: 0; margin-top: 1px; }
+    .log-body { flex: 1; min-width: 0; }
+    .log-msg  { font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .log-time { font-size: 11px; color: var(--muted); margin-top: 2px; }
+
+    .log-item.circulo { border-color: var(--green); background: var(--green-bg); }
+    .log-item.cuadrado { border-color: var(--red);  background: var(--red-bg); }
+
+    /* ── Barra inferior ───────────────────────────────────── */
+    footer {
+      padding: 12px 32px;
+      border-top: 1px solid var(--border);
+      background: var(--bg2);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    /* ── Responsive ───────────────────────────────────────── */
+    @media (max-width: 900px) {
+      main { grid-template-columns: 1fr; padding: 16px; }
+      .stats-row { grid-template-columns: repeat(2,1fr); }
+      .log-panel { grid-row: auto; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- ── Header ──────────────────────────────────────────────── -->
+<header>
+  <div class="header-left">
+    <div class="logo">👁</div>
+    <div class="header-title">
+      <h1>Clasificación por Visión Artificial</h1>
+      <p>Reto Making &amp; Hacking 2025-26 · Grupo G02 · Biele Group</p>
+    </div>
+  </div>
+  <div class="status-pill" id="statusPill">
+    <div class="status-dot"></div>
+    <span id="statusText">Conectando…</span>
+  </div>
+</header>
+
+<!-- ── Main ────────────────────────────────────────────────── -->
+<main>
+
+  <!-- Stats -->
+  <div class="stats-row">
+    <div class="stat-card">
+      <div class="stat-label">Ciclos totales</div>
+      <div class="stat-value" id="statTotal">0</div>
+      <div class="stat-sub">desde el inicio</div>
+    </div>
+    <div class="stat-card green">
+      <div class="stat-label">Círculos</div>
+      <div class="stat-value" id="statCirculos">0</div>
+      <div class="stat-sub">→ Posición B</div>
+    </div>
+    <div class="stat-card red">
+      <div class="stat-label">Cuadrados</div>
+      <div class="stat-value" id="statCuadrados">0</div>
+      <div class="stat-sub">→ Posición C</div>
+    </div>
+    <div class="stat-card blue">
+      <div class="stat-label">Último resultado</div>
+      <div class="stat-value" id="statUltimo" style="font-size:18px;padding-top:8px">—</div>
+      <div class="stat-sub" id="statUltimoTime">sin datos</div>
+    </div>
+  </div>
+
+  <!-- Visualizador -->
+  <div class="visualizer">
+
+    <!-- Resultado actual -->
+    <div class="resultado-card" id="resultadoCard">
+      <div class="forma-svg" id="formaSvg">
+        <svg width="80" height="80" viewBox="0 0 80 80">
+          <circle cx="40" cy="40" r="35" fill="none" stroke="#2a2f42" stroke-width="3" stroke-dasharray="6 4"/>
+        </svg>
+      </div>
+      <div class="resultado-info">
+        <h2 id="resultadoTexto" style="color:var(--muted)">Esperando…</h2>
+        <p id="resultadoDesc">El sistema está listo para clasificar</p>
+        <div class="destino" id="resultadoDestino" style="display:none"></div>
+      </div>
+    </div>
+
+    <!-- Estado del ciclo -->
+    <div class="ciclo-card card">
+      <div class="card-title">Estado del ciclo</div>
+      <div class="ciclo-steps">
+        <div class="ciclo-step" id="step-esperando">
+          <div class="step-dot">⏳</div>
+          <div class="step-label">Esperando cubo</div>
+        </div>
+        <div class="ciclo-step" id="step-capturando">
+          <div class="step-dot">📷</div>
+          <div class="step-label">Capturando imagen</div>
+        </div>
+        <div class="ciclo-step" id="step-moviendo">
+          <div class="step-dot">🔄</div>
+          <div class="step-label">Clasificando</div>
+        </div>
+        <div class="ciclo-step" id="step-volviendo">
+          <div class="step-dot">↩️</div>
+          <div class="step-label">Volviendo a A</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Mini chart de proporción -->
+    <div class="card">
+      <div class="card-title">Distribución de formas</div>
+      <div style="display:flex; align-items:center; gap:12px; margin-top:4px;">
+        <div style="flex:1; height:12px; border-radius:6px; background:var(--bg3); overflow:hidden;">
+          <div id="barCirculos" style="height:100%; background:var(--green); width:0%; border-radius:6px; transition:width .6s;"></div>
+        </div>
+        <span id="barLabel" style="font-size:12px; color:var(--muted); min-width:90px; text-align:right;">0% / 0%</span>
+      </div>
+      <div style="display:flex; justify-content:space-between; margin-top:6px;">
+        <span style="font-size:11px; color:var(--green);">● Círculos</span>
+        <span style="font-size:11px; color:var(--red);">● Cuadrados</span>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Log lateral -->
+  <div class="log-panel card">
+    <div class="card-title">Registro de clasificaciones</div>
+    <div class="log-list" id="logList">
+      <div class="log-item">
+        <div class="log-icon">ℹ️</div>
+        <div class="log-body">
+          <div class="log-msg">Sistema iniciado</div>
+          <div class="log-time">Esperando conexión con Arduino…</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</main>
+
+<!-- ── Footer ───────────────────────────────────────────────── -->
+<footer>
+  <span>G02 · Paula Amundarain, Mikel Barrena, Amara Echeverría, Alaitz Iriarte, Uxue Perkaz</span>
+  <span id="footerStatus">Desconectado</span>
+</footer>
+
+<!-- ── Script WebSocket ─────────────────────────────────────── -->
+<script>
+  // ── Conectar al servidor ──────────────────────────────────
+  // En modo demo/GitHub Pages, usa la URL del servidor ngrok:
+  const SERVER_URL = window.location.hostname === 'localhost'
+    ? 'http://localhost:5000'
+    : window.location.origin;   // misma URL si se sirve desde Flask
+
+  const socket = io(SERVER_URL, { transports: ['websocket', 'polling'] });
+
+  // ── Referencias DOM ───────────────────────────────────────
+  const statusPill   = document.getElementById('statusPill');
+  const statusText   = document.getElementById('statusText');
+  const footerStatus = document.getElementById('footerStatus');
+
+  const statTotal    = document.getElementById('statTotal');
+  const statCirculos = document.getElementById('statCirculos');
+  const statCuadrados= document.getElementById('statCuadrados');
+  const statUltimo   = document.getElementById('statUltimo');
+  const statUltimoTime=document.getElementById('statUltimoTime');
+
+  const resultadoCard= document.getElementById('resultadoCard');
+  const formaSvg     = document.getElementById('formaSvg');
+  const resultadoTexto=document.getElementById('resultadoTexto');
+  const resultadoDesc= document.getElementById('resultadoDesc');
+  const resultadoDestino=document.getElementById('resultadoDestino');
+
+  const barCirculos  = document.getElementById('barCirculos');
+  const barLabel     = document.getElementById('barLabel');
+  const logList      = document.getElementById('logList');
+
+  // ── WebSocket: conexión ────────────────────────────────────
+  socket.on('connect', () => {
+    statusPill.className = 'status-pill online';
+    statusText.textContent = 'Conectado';
+    footerStatus.textContent = 'Conectado al servidor';
+    addLog('ℹ️', 'Conexión establecida con el servidor', '', '');
+  });
+
+  socket.on('disconnect', () => {
+    statusPill.className = 'status-pill';
+    statusText.textContent = 'Desconectado';
+    footerStatus.textContent = 'Sin conexión';
+  });
+
+  // ── Estado inicial ─────────────────────────────────────────
+  socket.on('estado_inicial', (est) => {
+    actualizarEstadisticas(est);
+  });
+
+  // ── Eventos en tiempo real ─────────────────────────────────
+  socket.on('evento', (payload) => {
+    const { tipo, timestamp, estado, forma, destino, fase } = payload;
+
+    // Actualizar estadísticas siempre
+    actualizarEstadisticas(estado);
+
+    if (tipo === 'clasificacion') {
+      mostrarClasificacion(forma, destino, timestamp);
+      addLog(
+        forma === 'círculo' ? '🟢' : '🟥',
+        `${forma.charAt(0).toUpperCase() + forma.slice(1)} → Posición ${destino}`,
+        `Ciclo #${estado.ciclos_totales}`,
+        timestamp,
+        forma === 'círculo' ? 'circulo' : 'cuadrado'
+      );
+    }
+
+    if (tipo === 'fase') {
+      addLog('⚙️', fase, '', timestamp);
+    }
+
+    if (tipo === 'conexion' || tipo === 'error') {
+      addLog(tipo === 'conexion' ? '🔗' : '⚠️', payload.mensaje, '', timestamp);
+    }
+
+    // Estado del ciclo
+    actualizarCiclo(estado.estado_ciclo);
+  });
+
+  // ── Actualizar estadísticas ────────────────────────────────
+  function actualizarEstadisticas(est) {
+    statTotal.textContent    = est.ciclos_totales;
+    statCirculos.textContent = est.circulos;
+    statCuadrados.textContent= est.cuadrados;
+
+    if (est.ultimo_resultado) {
+      statUltimo.textContent   = est.ultimo_resultado === 'circulo' ? 'Círculo' : 'Cuadrado';
+      statUltimoTime.textContent = est.ultimo_timestamp || '';
+    }
+
+    // Barra de proporción
+    const total = est.circulos + est.cuadrados;
+    if (total > 0) {
+      const pct = Math.round((est.circulos / total) * 100);
+      barCirculos.style.width = pct + '%';
+      barLabel.textContent = `${pct}% / ${100 - pct}%`;
+    }
+  }
+
+  // ── Mostrar clasificación visual ──────────────────────────
+  function mostrarClasificacion(forma, destino, timestamp) {
+    resultadoCard.className = 'resultado-card ' + (forma === 'círculo' ? 'circulo' : 'cuadrado');
+
+    const color = forma === 'círculo' ? '#22c55e' : '#ef4444';
+
+    if (forma === 'círculo') {
+      formaSvg.innerHTML = `
+        <svg width="80" height="80" viewBox="0 0 80 80">
+          <circle cx="40" cy="40" r="35" fill="none" stroke="${color}" stroke-width="3"/>
+          <circle cx="40" cy="40" r="20" fill="${color}" opacity=".2"/>
+        </svg>`;
+      resultadoTexto.style.color = color;
+      resultadoTexto.textContent = 'Círculo detectado';
+      resultadoDesc.textContent  = 'Pieza con pegatina circular (Ø28 mm)';
+    } else {
+      formaSvg.innerHTML = `
+        <svg width="80" height="80" viewBox="0 0 80 80">
+          <rect x="8" y="8" width="64" height="64" rx="6" fill="none" stroke="${color}" stroke-width="3"/>
+          <rect x="20" y="20" width="40" height="40" rx="3" fill="${color}" opacity=".2"/>
+        </svg>`;
+      resultadoTexto.style.color = color;
+      resultadoTexto.textContent = 'Cuadrado detectado';
+      resultadoDesc.textContent  = 'Pieza con pegatina cuadrada (25×25 mm)';
+    }
+
+    resultadoDestino.style.display = 'inline-block';
+    resultadoDestino.textContent   = `→ Posición ${destino}`;
+  }
+
+  // ── Actualizar pasos del ciclo ────────────────────────────
+  const PASOS = ['esperando', 'capturando', 'moviendo', 'volviendo'];
+
+  function actualizarCiclo(fase) {
+    const idx = PASOS.indexOf(fase);
+    PASOS.forEach((p, i) => {
+      const el = document.getElementById('step-' + p);
+      if (!el) return;
+      el.className = 'ciclo-step' + (i < idx ? ' done' : i === idx ? ' active' : '');
+    });
+  }
+
+  // ── Añadir entrada al log ─────────────────────────────────
+  function addLog(icon, msg, sub, time, cls = '') {
+    const item = document.createElement('div');
+    item.className = 'log-item ' + cls;
+    item.innerHTML = `
+      <div class="log-icon">${icon}</div>
+      <div class="log-body">
+        <div class="log-msg">${msg}${sub ? ' · ' + sub : ''}</div>
+        <div class="log-time">${time || new Date().toLocaleTimeString()}</div>
+      </div>`;
+    logList.prepend(item);
+    // Máximo 50 entradas
+    while (logList.children.length > 50) logList.lastChild.remove();
+  }
+
+  // Estado inicial del ciclo
+  actualizarCiclo('esperando');
+</script>
+</body>
+</html>

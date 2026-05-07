@@ -1,0 +1,85 @@
+* ============================================================
+* Clasificación de objetos por visión artificial
+* Reto Making and Hacking 2025-26 - Grupo G02 - Biele Group
+* ============================================================
+*
+* Flujo:
+*   1. Espera señal 'R' de Arduino (cubo en posición A)
+*   2. Captura imagen con cámara GigE
+*   3. Segmenta y analiza: circularidad vs rectangularidad
+*   4. Envía '1' (círculo) o '2' (cuadrado) al Arduino
+*   5. Arduino mueve el cubo a B o C y vuelve a enviar 'R'
+
+* --- Abrir puerto serie ---
+open_serial ('COM3', SerialHandle)
+set_serial_param (SerialHandle, 9600, 8, 'none', 'none', 1, 0, 0)
+
+* --- Abrir y configurar cámara GigE ---
+open_framegrabber ('GigEVision2', 0, 0, 0, 0, 0, 0, 'progressive', -1, 'default', \
+                   -1, 'false', 'default', '34bd200dd39c_GEV_MVCU01610GM', 0, -1, AcqHandle)
+dev_open_window (0, 0, 512, 512, 'black', WindowHandle)
+grab_image_start (AcqHandle, -1)
+
+* Códigos ASCII de los caracteres que se intercambian
+tuple_ord('1', Uno)
+tuple_ord('2', Dos)
+tuple_ord('R', R)
+
+* ============================================================
+* Bucle principal
+* ============================================================
+while (true)
+
+    * 1. ESPERAR SEÑAL 'R' DE ARDUINO
+    Respuesta := ''
+    while (Respuesta != R)
+        try
+            read_serial (SerialHandle, 1, Respuesta)
+        catch (Exception)
+            * Timeout: seguimos esperando
+        endtry
+    endwhile
+
+    * 2. CAPTURA DE IMAGEN
+    dev_set_window (WindowHandle)
+    dev_clear_window ()
+    grab_image (Image, AcqHandle)
+    dev_display (Image)
+
+    * 3. SEGMENTACIÓN
+    count_channels (Image, Channels)
+    if (Channels == 3)
+        rgb1_to_gray (Image, GrayImage)
+    else
+        GrayImage := Image
+    endif
+    bin_threshold (GrayImage, Region)
+    complement (Region, RegionInvert)
+    opening_circle (RegionInvert, RegionOpened, 3.5)
+    connection (RegionOpened, ConnectedRegions)
+    select_shape_std (ConnectedRegions, SelectedRegion, 'max_area', 70)
+
+    * 4. ANÁLISIS DE FORMA
+    circularity (SelectedRegion, Circ)
+    rectangularity (SelectedRegion, Rect)
+
+    * 5. DECISIÓN Y ENVÍO AL ARDUINO
+    if (Circ > Rect)
+        dev_set_color ('green')
+        dev_display (SelectedRegion)
+        disp_message (WindowHandle, 'CÍRCULO - Enviando 1 a Arduino...', \
+                      'window', 40, 12, 'black', 'green')
+        write_serial (SerialHandle, Uno)
+    else
+        dev_set_color ('red')
+        dev_display (SelectedRegion)
+        disp_message (WindowHandle, 'CUADRADO - Enviando 2 a Arduino...', \
+                      'window', 40, 12, 'black', 'red')
+        write_serial (SerialHandle, Dos)
+    endif
+
+endwhile
+
+* --- Cierre (inalcanzable salvo interrupción externa) ---
+close_serial (SerialHandle)
+close_framegrabber (AcqHandle)
